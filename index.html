@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Holi Splash! 2026 - Colony Celebration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #f0fdf4; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; }
+        #game-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        canvas { background-color: #64748b; box-shadow: 0 10px 25px rgba(0,0,0,0.2); cursor: crosshair; max-width: 100%; max-height: 100%; }
+        .ui-overlay { position: absolute; top: 20px; left: 20px; pointer-events: none; color: #166534; font-weight: bold; text-shadow: 1px 1px 0px white; z-index: 5; }
+        .controls-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.8); padding: 8px 16px; border-radius: 20px; font-size: 14px; pointer-events: none; text-align: center; min-width: 250px; }
+        #splash-screen { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; text-align: center; padding: 20px; }
+        .btn { background: #ef4444; color: white; padding: 12px 24px; border-radius: 999px; font-size: 1.25rem; font-weight: bold; border: none; cursor: pointer; transition: transform 0.2s; margin-top: 20px; pointer-events: auto; }
+        .btn:hover { transform: scale(1.05); }
+        .btn:active { transform: scale(0.95); }
+        #mobile-controls { position: absolute; bottom: 40px; right: 30px; display: none; z-index: 10; }
+        .joy-btn { width: 90px; height: 90px; background: #ef4444; color: white; border: 4px solid white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 40px; pointer-events: auto; user-select: none; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        #screen-splat { position: absolute; inset: 0; pointer-events: none; z-index: 15; background: radial-gradient(circle, transparent 30%, rgba(236, 72, 153, 0.2) 100%); display: none; }
+        @media (max-width: 768px) { #mobile-controls { display: block; } .controls-hint { display: none; } }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" style="touch-action: none;"></canvas>
+    <div id="screen-splat"></div>
+    
+    <div class="ui-overlay">
+        <div class="text-2xl">Score: <span id="score">0</span></div>
+        <div class="text-sm">Balloons: <span id="ammo">15</span></div>
+        <div id="powerup-status" class="text-xs text-red-600 mt-1 font-black hidden">PICHKARI MODE! 🔫</div>
+    </div>
+
+    <div id="splash-screen">
+        <h1 class="text-5xl font-black text-red-500 mb-2">HOLI SPLASH! 2026</h1>
+        <p class="text-xl text-orange-600 font-bold">"Bura Na Maano, Holi Hai!"</p>
+        <div class="mt-4 text-gray-700 text-sm space-y-2">
+            <p>🎈 Splash Uncles and Aunties for points!</p>
+            <p>🐕 Don't splash the <b>Society Dog</b> (-50 pts)!</p>
+            <p>⚠️ Watch out for return fire!</p>
+            <p>🪣 Refill at the <b>Water Bucket</b>!</p>
+        </div>
+        <button class="btn" onclick="startGame()">START CELEBRATION</button>
+    </div>
+
+    <div id="mobile-controls">
+        <div class="joy-btn" id="btn-fire">🎈</div>
+    </div>
+
+    <div class="controls-hint">
+        <b>Drag</b> or <b>WASD</b> to Move | <b>Space / Tap Button</b> to Throw<br>
+        Happy <b>Holika Dahan</b> 2026!
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const ammoEl = document.getElementById('ammo');
+    const powerupEl = document.getElementById('powerup-status');
+    const splashScreen = document.getElementById('splash-screen');
+    const screenSplatEl = document.getElementById('screen-splat');
+
+    let gameActive = false;
+    let score = 0;
+    let ammo = 15;
+    let pichkariTimer = 0;
+    let currentNpcSpeed = 0.5;
+    let playerSplashedTimer = 0;
+
+    const config = {
+        playerSpeed: 7,
+        balloonSpeed: 10,
+        spawnRate: 1500,
+        colors: ['#ef4444', '#22c55e', '#3b82f6', '#eab308', '#d946ef', '#06b6d4'],
+        toranColors: ['#fbbf24', '#f97316', '#ef4444', '#22c55e'],
+        maxStains: 50,
+        npcBaseSpeed: 0.5,
+        npcMaxSpeed: 4.0,
+        npcSpeedIncrement: 0.0003
+    };
+
+    const player = { x: 0, y: 0, width: 60, height: 80, color: '#f97316' };
+    const bucket = { x: 75, y: 0, width: 60, height: 60 };
+
+    let targets = [];
+    let balloons = [];
+    let enemyBalloons = [];
+    let particles = [];
+    let floatingTexts = [];
+    let groundStains = [];
+    let powerups = [];
+
+    function init() {
+        resize();
+        player.x = canvas.width / 2 - player.width / 2;
+        bucket.y = canvas.height - 110;
+    }
+
+    function resize() {
+        canvas.width = Math.min(window.innerWidth, 800);
+        canvas.height = window.innerHeight;
+        player.y = canvas.height - 120;
+        bucket.y = canvas.height - 110;
+    }
+
+    window.addEventListener('resize', resize);
+
+    canvas.addEventListener('pointermove', e => {
+        if (!gameActive) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        player.x = x - player.width / 2;
+        player.x = Math.max(65, Math.min(canvas.width - 65 - player.width, player.x));
+    });
+
+    const keys = {};
+    window.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp') throwBalloon();
+    });
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    document.getElementById('btn-fire').addEventListener('pointerdown', (e) => { 
+        e.preventDefault(); 
+        throwBalloon(); 
+    });
+
+    function startGame() {
+        splashScreen.style.display = 'none';
+        score = 0; ammo = 20; pichkariTimer = 0; currentNpcSpeed = config.npcBaseSpeed;
+        targets = []; balloons = []; enemyBalloons = []; particles = []; floatingTexts = []; groundStains = []; powerups = [];
+        scoreEl.innerText = score; ammoEl.innerText = ammo;
+        gameActive = true;
+        requestAnimationFrame(gameLoop);
+        spawnTarget();
+        spawnPowerup();
+    }
+
+    function spawnTarget() {
+        if (!gameActive) return;
+        const rand = Math.random();
+        let type, width, height, speedMod, color;
+        
+        if (rand < 0.1) { type = 'dog'; width = 60; height = 40; speedMod = 2.0; color = '#d97706'; } // Fast dog
+        else if (rand < 0.35) { type = 'uncle'; width = 50; height = 90; speedMod = 0.5; color = '#3b82f6'; }
+        else if (rand < 0.55) { type = 'kid'; width = 45; height = 60; speedMod = 0.8; color = '#ec4899'; }
+        else if (rand < 0.8) { type = 'auntie'; width = 50; height = 85; speedMod = 0.6; color = '#f97316'; }
+        else { type = 'granny'; width = 45; height = 80; speedMod = 0.3; color = '#94a3b8'; }
+
+        const roadX = 65 + Math.random() * (canvas.width - 130 - width);
+        targets.push({ x: roadX, y: -100, width, height, speed: currentNpcSpeed + Math.random() * speedMod, type, hit: false, color });
+        setTimeout(spawnTarget, config.spawnRate - Math.min(score * 5, 1100));
+    }
+
+    function spawnPowerup() {
+        if (!gameActive) return;
+        if (Math.random() > 0.4) {
+            const roadX = 65 + Math.random() * (canvas.width - 170);
+            powerups.push({ x: roadX, y: -50, width: 40, height: 40, speed: 2, type: 'pichkari' });
+        }
+        setTimeout(spawnPowerup, 8000 + Math.random() * 7000);
+    }
+
+    function addStain(x, y, color) {
+        const size = 20 + Math.random() * 30;
+        const drops = [];
+        for (let i = 0; i < 7; i++) {
+            drops.push({ angle: Math.random() * Math.PI * 2, dist: size * (0.4 + Math.random() * 0.8), size: size * (0.2 + Math.random() * 0.5) });
+        }
+        groundStains.push({ x, y, size, color, alpha: 0.6, drops });
+        if (groundStains.length > config.maxStains) groundStains.shift();
+    }
+
+    function throwBalloon() {
+        if (!gameActive || (ammo <= 0 && pichkariTimer <= 0)) return;
+        if (pichkariTimer <= 0) { ammo--; ammoEl.innerText = ammo; }
+        balloons.push({
+            x: player.x + player.width / 2, y: player.y, radius: pichkariTimer > 0 ? 8 : 12,
+            color: config.colors[Math.floor(Math.random() * config.colors.length)],
+            vx: (Math.random() - 0.5) * (pichkariTimer > 0 ? 4 : 0),
+            vy: -config.balloonSpeed
+        });
+    }
+
+    function createExplosion(x, y, color) {
+        addStain(x, y, color);
+        for (let i = 0; i < 15; i++) {
+            particles.push({ x, y, radius: Math.random() * 6 + 2, color, vx: (Math.random() - 0.5) * 12, vy: (Math.random() - 0.5) * 12, life: 1.0 });
+        }
+    }
+
+    function drawBucket() {
+        const x = bucket.x, y = bucket.y, w = bucket.width, h = bucket.height;
+        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x + w/2, y + 5, w/2 - 5, Math.PI, 0); ctx.stroke();
+        const grad = ctx.createLinearGradient(x, y, x + w, y); grad.addColorStop(0, '#64748b'); grad.addColorStop(0.5, '#94a3b8'); grad.addColorStop(1, '#475569');
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(x, y + 10); ctx.lineTo(x + w, y + 10); ctx.lineTo(x + w - 10, y + h); ctx.lineTo(x + 10, y + h); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#334155'; ctx.beginPath(); ctx.ellipse(x + w/2, y + 10, w/2, 5, 0, 0, Math.PI * 2); ctx.fill();
+        const waterOffset = Math.sin(Date.now() / 200) * 2; ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.ellipse(x + w/2, y + 12 + waterOffset/2, w/2 - 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'white'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText("REFILL", x + w/2, y + h - 15);
+    }
+
+    function drawPichkari(x, y, scale = 1, rotation = 0) {
+        ctx.save(); ctx.translate(x, y); ctx.rotate(rotation); ctx.scale(scale, scale);
+        ctx.fillStyle = '#cbd5e1'; ctx.fillRect(-15, 3, 20, 4);
+        ctx.fillStyle = '#ef4444'; ctx.fillRect(-18, 0, 5, 10);
+        const barrelGrad = ctx.createLinearGradient(0, 0, 0, 10); barrelGrad.addColorStop(0, '#ef4444'); barrelGrad.addColorStop(0.5, '#f87171'); barrelGrad.addColorStop(1, '#dc2626');
+        ctx.fillStyle = barrelGrad; ctx.beginPath(); ctx.roundRect(0, 0, 45, 12, 2); ctx.fill();
+        ctx.fillStyle = '#fbbf24'; ctx.fillRect(10, 0, 4, 12); ctx.fillRect(28, 0, 4, 12);
+        ctx.fillStyle = '#1e293b'; ctx.beginPath(); ctx.moveTo(45, 2); ctx.lineTo(55, 6); ctx.lineTo(45, 10); ctx.closePath(); ctx.fill();
+        ctx.restore();
+    }
+
+    function drawBonfire() {
+        const bx = canvas.width - 120, by = 150;
+        ctx.fillStyle = '#451a03'; ctx.fillRect(bx - 30, by + 40, 60, 10); ctx.fillRect(bx - 20, by + 30, 40, 10);
+        const t = Date.now() / 150;
+        for (let i = 0; i < 5; i++) {
+            const h = 40 + Math.sin(t + i) * 20; ctx.fillStyle = i % 2 === 0 ? '#f97316' : '#facc15';
+            ctx.beginPath(); ctx.moveTo(bx - 25 + i*10, by + 40); ctx.quadraticCurveTo(bx - 25 + i*10 + 5, by + 40 - h, bx - 25 + i*10 + 10, by + 40); ctx.fill();
+        }
+        ctx.fillStyle = 'rgba(251, 146, 60, 0.2)'; ctx.beginPath(); ctx.arc(bx, by + 30, 60 + Math.sin(t)*5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'white'; ctx.font = 'bold 12px sans-serif'; ctx.fillText("HOLIKA DAHAN", bx, by + 70);
+    }
+
+    function drawDecorations() {
+        // Torans (Buntings)
+        for(let j=0; j<3; j++) {
+            const y = 50 + j*150;
+            ctx.strokeStyle = '#166534'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.quadraticCurveTo(canvas.width/2, y + 40, canvas.width, y); ctx.stroke();
+            for(let i=0; i<10; i++) {
+                const tx = (canvas.width / 10) * i + 40;
+                const ty = y + Math.sin((tx / canvas.width) * Math.PI) * 40;
+                ctx.fillStyle = config.toranColors[i % 4];
+                ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx-10, ty+15); ctx.lineTo(tx+10, ty+15); ctx.closePath(); ctx.fill();
+            }
+        }
+        // Banner
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.fillRect(canvas.width/2 - 150, 20, 300, 50);
+        ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 3; ctx.strokeRect(canvas.width/2 - 150, 20, 300, 50);
+        ctx.fillStyle = '#dc2626'; ctx.font = 'bold 24px "Arial"'; ctx.textAlign = 'center';
+        ctx.fillText("HAPPY HOLI 2026!", canvas.width/2, 55);
+    }
+
+    function drawPlayer() {
+        const headX = player.x + player.width/2, headY = player.y + 20;
+        ctx.fillStyle = player.color; ctx.beginPath(); ctx.roundRect(player.x, player.y + 20, player.width, player.height - 20, 10); ctx.fill();
+        ctx.fillStyle = '#ffdbac'; ctx.beginPath(); ctx.arc(headX, headY, 20, 0, Math.PI * 2); ctx.fill();
+        if (pichkariTimer > 0) drawPichkari(headX + 15, headY + 10, 0.8);
+        ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(headX - 7, headY - 2, 2.5, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(headX + 7, headY - 2, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(headX - 12, headY - 10); ctx.lineTo(headX - 2, headY - 7); ctx.stroke(); ctx.beginPath(); ctx.moveTo(headX + 12, headY - 10); ctx.lineTo(headX + 2, headY - 7); ctx.stroke(); ctx.beginPath(); ctx.arc(headX, headY + 5, 8, 0.2, Math.PI - 0.2); ctx.stroke();
+    }
+
+    function drawTarget(t) {
+        ctx.save();
+        if (t.hit) { ctx.translate(t.x + t.width/2, t.y + t.height/2); ctx.rotate(Math.sin(Date.now() / 100) * 0.2); ctx.translate(-(t.x + t.width/2), -(t.y + t.height/2)); }
+        
+        if (t.type === 'dog') {
+            ctx.fillStyle = t.hit ? '#fecaca' : t.color;
+            ctx.beginPath(); ctx.roundRect(t.x, t.y + 10, 50, 25, 10); ctx.fill(); // Body
+            ctx.beginPath(); ctx.arc(t.x + 45, t.y + 10, 15, 0, Math.PI*2); ctx.fill(); // Head
+            ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(t.x + 52, t.y + 8, 2, 0, Math.PI*2); ctx.fill(); // Eye
+            ctx.fillStyle = t.color; ctx.beginPath(); ctx.ellipse(t.x + 40, t.y + 0, 10, 5, 0.5, 0, Math.PI*2); ctx.fill(); // Ear
+            ctx.strokeStyle = t.color; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(t.x, t.y + 15); ctx.quadraticCurveTo(t.x - 15, t.y + 5, t.x - 10, t.y + 25); ctx.stroke(); // Tail
+        } else {
+            const headX = t.x + t.width/2, headY = t.y + 20;
+            if (t.type === 'uncle') {
+                ctx.fillStyle = t.hit ? '#e2e8f0' : '#f8fafc'; ctx.beginPath(); ctx.roundRect(t.x, t.y + 20, t.width, 40, [10, 10, 0, 0]); ctx.fill();
+                ctx.fillStyle = '#334155'; ctx.beginPath(); ctx.roundRect(t.x, t.y + 60, t.width, t.height - 60, [0, 0, 10, 10]); ctx.fill();
+                ctx.fillStyle = 'black'; ctx.fillRect(t.x, t.y + 58, t.width, 4);
+            } else if (t.type === 'auntie') {
+                ctx.fillStyle = '#991b1b'; ctx.beginPath(); ctx.roundRect(t.x + 5, t.y + 20, t.width - 10, 25, [5, 5, 0, 0]); ctx.fill();
+                ctx.fillStyle = t.hit ? '#fecaca' : t.color; ctx.beginPath(); ctx.roundRect(t.x, t.y + 40, t.width, t.height - 40, [0, 0, 15, 15]); ctx.fill();
+                ctx.fillStyle = t.hit ? '#fca5a5' : '#ea580c'; ctx.beginPath(); ctx.moveTo(t.x + 5, t.y + 25); ctx.lineTo(t.x + t.width, t.y + 50); ctx.lineTo(t.x + t.width - 5, t.y + t.height - 5); ctx.lineTo(t.x, t.y + 45); ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = '#fde047'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(t.x + 5, t.y + 25); ctx.lineTo(t.x + t.width, t.y + 50); ctx.stroke();
+            } else if (t.type === 'granny') {
+                ctx.fillStyle = t.hit ? '#fecaca' : t.color; ctx.beginPath(); ctx.roundRect(t.x, t.y + 20, t.width, t.height - 20, 15); ctx.fill();
+                ctx.fillStyle = '#475569'; ctx.beginPath(); ctx.moveTo(t.x, t.y + 30); ctx.quadraticCurveTo(headX, t.y + 50, t.x + t.width, t.y + 30); ctx.stroke();
+            } else { ctx.fillStyle = t.hit ? '#e2e8f0' : t.color; ctx.beginPath(); ctx.roundRect(t.x, t.y + 20, t.width, t.height - 20, 10); ctx.fill(); }
+
+            if (t.type === 'granny') { ctx.strokeStyle = '#475569'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(headX, headY - 20); ctx.lineTo(headX + 25, headY - 50); ctx.stroke(); ctx.fillStyle = '#1e293b'; ctx.beginPath(); ctx.arc(headX + 30, headY - 55, 35, Math.PI, 0); ctx.fill(); }
+            ctx.fillStyle = '#e0ac69'; ctx.beginPath(); ctx.arc(headX, headY, (t.type === 'uncle' || t.type === 'granny') ? 22 : 18, 0, Math.PI * 2); ctx.fill();
+            if (t.type === 'granny') { ctx.fillStyle = '#cbd5e1'; ctx.beginPath(); ctx.arc(headX, headY - 12, 16, Math.PI, 0); ctx.fill(); ctx.beginPath(); ctx.arc(headX + 16, headY - 8, 8, 0, Math.PI * 2); ctx.fill(); }
+            if (t.type === 'auntie') { ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(headX, headY - 10, 16, Math.PI, 0); ctx.fill(); ctx.beginPath(); ctx.arc(headX + 16, headY - 5, 9, 0, Math.PI * 2); ctx.fill(); }
+            if (t.type === 'uncle') { ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.moveTo(headX - 15, headY + 8); ctx.quadraticCurveTo(headX, headY + 2, headX + 15, headY + 8); ctx.lineTo(headX + 15, headY + 12); ctx.quadraticCurveTo(headX, headY + 6, headX - 15, headY + 12); ctx.fill(); }
+
+            if (t.hit) {
+                ctx.strokeStyle = (t.type === 'auntie' || t.type === 'granny') ? 'red' : '#333'; ctx.lineWidth = 2;
+                if (t.type === 'auntie' || t.type === 'granny') { ctx.beginPath(); ctx.moveTo(headX - 12, headY - 10); ctx.lineTo(headX - 2, headY - 5); ctx.stroke(); ctx.beginPath(); ctx.moveTo(headX + 12, headY - 10); ctx.lineTo(headX + 2, headY - 5); ctx.stroke(); ctx.beginPath(); ctx.arc(headX, headY + 12, 6, Math.PI, 0, false); ctx.stroke(); }
+                else { ctx.beginPath(); ctx.arc(headX - 7, headY - 3, 4, Math.PI, 0); ctx.stroke(); ctx.beginPath(); ctx.arc(headX + 7, headY - 3, 4, Math.PI, 0); ctx.stroke(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(headX, headY + 8, 6, 0, Math.PI, false); ctx.fill(); ctx.stroke(); }
+                ctx.fillStyle = 'rgba(255, 0, 255, 0.4)'; ctx.beginPath(); ctx.arc(t.x + 10, t.y + 40, 10, 0, Math.PI*2); ctx.fill();
+            } else { ctx.fillStyle = 'black'; ctx.beginPath(); ctx.arc(headX - 7, headY - 3, 3, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(headX + 7, headY - 3, 3, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'black'; ctx.beginPath(); ctx.arc(headX, headY + 8, 3, 0, Math.PI * 2); ctx.stroke(); }
+        }
+        ctx.restore();
+    }
+
+    function drawColonyStreet() {
+        ctx.fillStyle = '#64748b'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.setLineDash([20, 20]); ctx.beginPath(); ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, canvas.height); ctx.stroke(); ctx.setLineDash([]);
+        const wallWidth = 60; ctx.fillStyle = '#fde68a'; ctx.fillRect(0, 0, wallWidth, canvas.height); ctx.fillStyle = '#fecaca'; ctx.fillRect(canvas.width - wallWidth, 0, wallWidth, canvas.height);
+        for(let i=100; i < canvas.height; i += 300) { ctx.fillStyle = '#1e293b'; ctx.fillRect(5, i, 50, 80); ctx.fillRect(canvas.width - 55, i + 100, 50, 80); }
+        ctx.globalAlpha = 0.1; ctx.fillStyle = '#f472b6'; for(let i=0; i<5; i++) { ctx.beginPath(); ctx.arc(Math.random()*canvas.width, Math.random()*canvas.height, 100, 0, Math.PI*2); ctx.fill(); } ctx.globalAlpha = 1.0;
+    }
+
+    function gameLoop() {
+        if (!gameActive) return; ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawColonyStreet(); drawDecorations(); drawBonfire();
+        if (currentNpcSpeed < config.npcMaxSpeed) currentNpcSpeed += config.npcSpeedIncrement;
+
+        for(let s of groundStains) { ctx.globalAlpha = s.alpha; ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(s.x, s.y, s.size, 0, Math.PI*2); ctx.fill(); for(let d of s.drops) { ctx.beginPath(); ctx.arc(s.x + Math.cos(d.angle) * d.dist, s.y + Math.sin(d.angle) * d.dist, d.size, 0, Math.PI*2); ctx.fill(); } }
+        ctx.globalAlpha = 1.0; drawBucket();
+        if (player.x < bucket.x + bucket.width && player.x + player.width > bucket.x) { if (ammo < 30) { ammo = 30; ammoEl.innerText = ammo; floatingTexts.push({ x: bucket.x + 30, y: bucket.y, text: "REFILLED!", life: 1.0 }); } }
+        if ((keys['KeyA'] || keys['ArrowLeft']) && player.x > 65) player.x -= config.playerSpeed; if ((keys['KeyD'] || keys['ArrowRight']) && player.x < canvas.width - 65 - player.width) player.x += config.playerSpeed;
+        if (pichkariTimer > 0) { pichkariTimer--; if (pichkariTimer % 5 === 0) throwBalloon(); if (pichkariTimer === 0) powerupEl.classList.add('hidden'); }
+        for (let i = powerups.length - 1; i >= 0; i--) { const p = powerups[i]; p.y += p.speed; drawPichkari(p.x, p.y + 15, 1, Math.sin(Date.now()/200) * 0.2); if (p.x < player.x + player.width && p.x + p.width > player.x && p.y < player.y + player.height && p.y + p.height > player.y) { pichkariTimer = 300; powerupEl.classList.remove('hidden'); powerups.splice(i, 1); } else if (p.y > canvas.height) powerups.splice(i, 1); }
+        for (let i = balloons.length - 1; i >= 0; i--) { const b = balloons[i]; b.y += b.vy; b.x += (b.vx || 0); ctx.fillStyle = b.color; ctx.beginPath(); ctx.ellipse(b.x, b.y, b.radius, b.radius + 4, 0, 0, Math.PI * 2); ctx.fill(); if (b.y < -50) balloons.splice(i, 1); }
+        for (let i = enemyBalloons.length - 1; i >= 0; i--) { const eb = enemyBalloons[i]; eb.y += eb.vy; eb.x += eb.vx; ctx.fillStyle = eb.color; ctx.beginPath(); ctx.arc(eb.x, eb.y, 10, 0, Math.PI*2); ctx.fill(); if (eb.x > player.x && eb.x < player.x + player.width && eb.y > player.y && eb.y < player.y + player.height) { playerSplashedTimer = 60; screenSplatEl.style.display = 'block'; enemyBalloons.splice(i, 1); floatingTexts.push({ x: player.x + player.width/2, y: player.y, text: "OUCH!", life: 1.0 }); } else if (eb.y > canvas.height) enemyBalloons.splice(i, 1); }
+        if (playerSplashedTimer > 0) { playerSplashedTimer--; if (playerSplashedTimer === 0) screenSplatEl.style.display = 'none'; }
+
+        for (let i = targets.length - 1; i >= 0; i--) {
+            const t = targets[i]; t.y += t.speed;
+            for (let j = balloons.length - 1; j >= 0; j--) {
+                const b = balloons[j];
+                if (!t.hit && b.x > t.x && b.x < t.x + (t.type === 'dog' ? 60 : t.width) && b.y > t.y && b.y < t.y + (t.type === 'dog' ? 40 : t.height)) {
+                    t.hit = true; createExplosion(b.x, b.y, b.color); balloons.splice(j, 1);
+                    if (t.type === 'dog') { score = Math.max(0, score - 50); floatingTexts.push({ x: t.x, y: t.y, text: "BOW!! (-50)", life: 1.0 }); t.speed = 10; } // Dog runs away
+                    else {
+                        score += (t.type === 'uncle' || t.type === 'granny') ? 20 : 10;
+                        if ((t.type === 'auntie' || t.type === 'uncle') && Math.random() > 0.6) enemyBalloons.push({ x: t.x + t.width/2, y: t.y + t.height, vx: (player.x - t.x) * 0.05, vy: 5, color: '#22c55e' });
+                        floatingTexts.push({ x: t.x + t.width/2, y: t.y, text: (t.type === 'auntie' || t.type === 'granny' ? "HEY!" : "Splashed!"), life: 1.0 });
+                        t.speed = 1.0;
+                    }
+                    scoreEl.innerText = score;
+                }
+            }
+            drawTarget(t); if (t.y > canvas.height) targets.splice(i, 1);
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.02; if (p.life <= 0) { particles.splice(i, 1); continue; } ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill(); }
+        ctx.globalAlpha = 1.0; ctx.font = "bold 18px 'Segoe UI'"; ctx.textAlign = "center";
+        for (let i = floatingTexts.length - 1; i >= 0; i--) { const ft = floatingTexts[i]; ft.y -= 1.2; ft.life -= 0.015; if (ft.life <= 0) { floatingTexts.splice(i, 1); continue; } ctx.fillStyle = `rgba(220, 38, 38, ${ft.life})`; ctx.fillText(ft.text, ft.x, ft.y); }
+        drawPlayer(); requestAnimationFrame(gameLoop);
+    }
+    init();
+</script>
+</body>
+</html>

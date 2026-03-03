@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "powershell -ExecutionPolicy Bypass -File \"C:\\Users\\Savyasachi Mishra\\.kirin\\copilot-hooks\\kirin-UserPromptSubmit.ps1\"",
+        "timeout": 10
+      }
+    ],
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "powershell -ExecutionPolicy Bypass -File \"C:\\Users\\Savyasachi Mishra\\.kirin\\copilot-hooks\\kirin-PreToolUse.ps1\"",
+        "timeout": 10
+      }
+    ],
+    "PostToolUse": [
+      {
+        "type": "command",
+        "command": "powershell -ExecutionPolicy Bypass -File \"C:\\Users\\Savyasachi Mishra\\.kirin\\copilot-hooks\\kirin-PostToolUse.ps1\"",
+        "timeout": 10
+      }
+    ]
+  }
+}
