@@ -1,6 +1,6 @@
 services:
-  - type: static
+  - type: web
     name: holi-splash-2026
-    env: static
-    buildCommand: "" # No build step needed for simple HTML
-    publishPath: "." # Root directory containing index.html
+    runtime: static
+    buildCommand: "" 
+    staticPublishPath: "."
