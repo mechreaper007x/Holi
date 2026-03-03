@@ -10,6 +10,16 @@
         #game-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
         canvas { background-color: #64748b; box-shadow: 0 10px 25px rgba(0,0,0,0.2); cursor: crosshair; max-width: 100%; max-height: 100%; }
         .ui-overlay { position: absolute; top: 20px; left: 20px; pointer-events: none; color: #166534; font-weight: bold; text-shadow: 1px 1px 0px white; z-index: 5; }
+        .leaderboard-panel { position: absolute; top: 20px; right: 20px; z-index: 6; background: rgba(255,255,255,0.88); border: 2px solid #fb7185; border-radius: 12px; padding: 10px 12px; min-width: 220px; color: #7f1d1d; box-shadow: 0 8px 18px rgba(0,0,0,0.15); pointer-events: none; }
+        .leaderboard-title { font-size: 14px; font-weight: 900; letter-spacing: 0.03em; margin-bottom: 6px; text-transform: uppercase; color: #be123c; }
+        .leaderboard-list { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.5; font-weight: 700; }
+        .leaderboard-empty { font-size: 12px; margin: 0; color: #7f1d1d; font-weight: 700; }
+        .name-input-wrap { margin-top: 18px; width: 100%; max-width: 360px; display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+        .name-input-label { font-weight: 800; color: #7f1d1d; font-size: 14px; }
+        .name-input { font-size: 16px; border: 2px solid #fb7185; border-radius: 999px; padding: 10px 14px; text-align: center; font-weight: 700; color: #7f1d1d; outline: none; }
+        .name-input:focus { border-color: #dc2626; box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.35); }
+        .name-error { min-height: 16px; font-size: 12px; font-weight: 700; color: #b91c1c; }
+        .splash-board { margin-top: 6px; width: 100%; max-width: 360px; background: rgba(255,255,255,0.78); border: 2px solid #fb7185; border-radius: 14px; padding: 10px 14px; }
         .controls-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.8); padding: 8px 16px; border-radius: 20px; font-size: 14px; pointer-events: none; text-align: center; min-width: 250px; }
         #splash-screen { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; text-align: center; padding: 20px; }
         .btn { background: #ef4444; color: white; padding: 12px 24px; border-radius: 999px; font-size: 1.25rem; font-weight: bold; border: none; cursor: pointer; transition: transform 0.2s; margin-top: 20px; pointer-events: auto; }
@@ -18,7 +28,7 @@
         #mobile-controls { position: absolute; bottom: 40px; right: 30px; display: none; z-index: 10; }
         .joy-btn { width: 90px; height: 90px; background: #ef4444; color: white; border: 4px solid white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 40px; pointer-events: auto; user-select: none; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         #screen-splat { position: absolute; inset: 0; pointer-events: none; z-index: 15; background: radial-gradient(circle, transparent 30%, rgba(236, 72, 153, 0.2) 100%); display: none; }
-        @media (max-width: 768px) { #mobile-controls { display: block; } .controls-hint { display: none; } }
+        @media (max-width: 768px) { #mobile-controls { display: block; } .controls-hint { display: none; } .leaderboard-panel { min-width: 170px; padding: 8px 10px; top: 12px; right: 12px; } .leaderboard-list { font-size: 12px; } }
     </style>
 </head>
 <body>
@@ -29,8 +39,15 @@
     
     <div class="ui-overlay">
         <div class="text-2xl">Score: <span id="score">0</span></div>
+        <div class="text-sm">Player: <span id="player-display">Guest</span></div>
         <div class="text-sm">Balloons: <span id="ammo">15</span></div>
         <div id="powerup-status" class="text-xs text-red-600 mt-1 font-black hidden">PICHKARI MODE! 🔫</div>
+    </div>
+
+    <div class="leaderboard-panel">
+        <div class="leaderboard-title">Top Splashers</div>
+        <ol id="leaderboard-list" class="leaderboard-list"></ol>
+        <p id="leaderboard-empty" class="leaderboard-empty">No scores yet. Be the first!</p>
     </div>
 
     <div id="splash-screen">
@@ -41,6 +58,16 @@
             <p>🐕 Don't splash the <b>Society Dog</b> (-50 pts)!</p>
             <p>⚠️ Watch out for return fire!</p>
             <p>🪣 Refill at the <b>Water Bucket</b>!</p>
+        </div>
+        <div class="name-input-wrap">
+            <label for="player-name" class="name-input-label">Enter your player name:</label>
+            <input id="player-name" class="name-input" type="text" maxlength="16" placeholder="Your Name" autocomplete="off">
+            <p id="name-error" class="name-error"></p>
+        </div>
+        <div class="splash-board">
+            <div class="leaderboard-title">Leaderboard</div>
+            <ol id="leaderboard-list-splash" class="leaderboard-list"></ol>
+            <p id="leaderboard-empty-splash" class="leaderboard-empty">No scores yet. Be the first!</p>
         </div>
         <button class="btn" onclick="startGame()">START CELEBRATION</button>
     </div>
@@ -61,15 +88,28 @@
     const scoreEl = document.getElementById('score');
     const ammoEl = document.getElementById('ammo');
     const powerupEl = document.getElementById('powerup-status');
+    const playerDisplayEl = document.getElementById('player-display');
     const splashScreen = document.getElementById('splash-screen');
     const screenSplatEl = document.getElementById('screen-splat');
+    const playerNameInput = document.getElementById('player-name');
+    const nameErrorEl = document.getElementById('name-error');
+    const leaderboardListEl = document.getElementById('leaderboard-list');
+    const leaderboardListSplashEl = document.getElementById('leaderboard-list-splash');
+    const leaderboardEmptyEl = document.getElementById('leaderboard-empty');
+    const leaderboardEmptySplashEl = document.getElementById('leaderboard-empty-splash');
+
+    const LEADERBOARD_KEY = 'holiSplashLeaderboard2026';
+    const LAST_PLAYER_KEY = 'holiSplashLastPlayer2026';
+    const MAX_LEADERBOARD_ENTRIES = 8;
 
     let gameActive = false;
     let score = 0;
     let ammo = 15;
+    let playerName = 'Guest';
     let pichkariTimer = 0;
     let currentNpcSpeed = 0.5;
     let playerSplashedTimer = 0;
+    let leaderboard = [];
 
     const config = {
         playerSpeed: 7,
@@ -94,10 +134,94 @@
     let groundStains = [];
     let powerups = [];
 
+    function sanitizePlayerName(rawName) {
+        const sanitized = (rawName || '').replace(/[^\w\s.-]/g, '').trim().replace(/\s+/g, ' ');
+        return sanitized.slice(0, 16);
+    }
+
+    function loadLeaderboard() {
+        try {
+            const parsed = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || '[]');
+            if (!Array.isArray(parsed)) return [];
+            return parsed
+                .filter(entry => entry && typeof entry.name === 'string' && Number.isFinite(entry.score))
+                .map(entry => ({ name: sanitizePlayerName(entry.name) || 'Guest', score: Math.max(0, Math.floor(entry.score)), updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : Date.now() }))
+                .sort((a, b) => b.score - a.score || a.updatedAt - b.updatedAt)
+                .slice(0, MAX_LEADERBOARD_ENTRIES);
+        } catch (err) {
+            console.warn('Failed to load leaderboard:', err);
+            return [];
+        }
+    }
+
+    function saveLeaderboard() {
+        try {
+            localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(leaderboard));
+        } catch (err) {
+            console.warn('Failed to save leaderboard:', err);
+        }
+    }
+
+    function renderLeaderboard() {
+        const lists = [leaderboardListEl, leaderboardListSplashEl];
+        const empties = [leaderboardEmptyEl, leaderboardEmptySplashEl];
+        lists.forEach(listEl => { listEl.innerHTML = ''; });
+
+        if (leaderboard.length === 0) {
+            empties.forEach(el => el.style.display = 'block');
+            return;
+        }
+
+        empties.forEach(el => el.style.display = 'none');
+        leaderboard.forEach((entry, index) => {
+            lists.forEach(listEl => {
+                const li = document.createElement('li');
+                li.innerText = `${index + 1}. ${entry.name} - ${entry.score}`;
+                listEl.appendChild(li);
+            });
+        });
+    }
+
+    function updateLeaderboardForPlayer(name, newScore) {
+        if (!name || newScore < 0) return;
+
+        const normalizedName = name.toLowerCase();
+        const existing = leaderboard.find(entry => entry.name.toLowerCase() === normalizedName);
+        if (existing) {
+            if (newScore > existing.score) {
+                existing.score = newScore;
+                existing.updatedAt = Date.now();
+            }
+        } else {
+            leaderboard.push({ name, score: newScore, updatedAt: Date.now() });
+        }
+
+        leaderboard = leaderboard
+            .sort((a, b) => b.score - a.score || a.updatedAt - b.updatedAt)
+            .slice(0, MAX_LEADERBOARD_ENTRIES);
+
+        saveLeaderboard();
+        renderLeaderboard();
+    }
+
+    function recordCurrentScore() {
+        if (!playerName) return;
+        updateLeaderboardForPlayer(playerName, score);
+    }
+
     function init() {
         resize();
         player.x = canvas.width / 2 - player.width / 2;
         bucket.y = canvas.height - 110;
+        leaderboard = loadLeaderboard();
+        renderLeaderboard();
+
+        const savedName = sanitizePlayerName(localStorage.getItem(LAST_PLAYER_KEY) || '');
+        if (savedName) {
+            playerNameInput.value = savedName;
+            playerName = savedName;
+            playerDisplayEl.innerText = savedName;
+        }
     }
 
     function resize() {
@@ -129,11 +253,23 @@
         throwBalloon(); 
     });
 
+    playerNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') startGame();
+    });
+
     function startGame() {
+        const chosenName = sanitizePlayerName(playerNameInput.value) || 'Guest';
+        nameErrorEl.innerText = chosenName === 'Guest' ? 'Tip: add your name to appear on the leaderboard.' : '';
+        playerName = chosenName;
+        playerDisplayEl.innerText = playerName;
+        playerNameInput.value = playerName;
+        localStorage.setItem(LAST_PLAYER_KEY, playerName);
+
         splashScreen.style.display = 'none';
         score = 0; ammo = 20; pichkariTimer = 0; currentNpcSpeed = config.npcBaseSpeed;
         targets = []; balloons = []; enemyBalloons = []; particles = []; floatingTexts = []; groundStains = []; powerups = [];
         scoreEl.innerText = score; ammoEl.innerText = ammo;
+        recordCurrentScore();
         gameActive = true;
         requestAnimationFrame(gameLoop);
         spawnTarget();
@@ -336,6 +472,7 @@
                         t.speed = 1.0;
                     }
                     scoreEl.innerText = score;
+                    recordCurrentScore();
                 }
             }
             drawTarget(t); if (t.y > canvas.height) targets.splice(i, 1);
@@ -346,6 +483,24 @@
         for (let i = floatingTexts.length - 1; i >= 0; i--) { const ft = floatingTexts[i]; ft.y -= 1.2; ft.life -= 0.015; if (ft.life <= 0) { floatingTexts.splice(i, 1); continue; } ctx.fillStyle = `rgba(220, 38, 38, ${ft.life})`; ctx.fillText(ft.text, ft.x, ft.y); }
         drawPlayer(); requestAnimationFrame(gameLoop);
     }
+
+    function renderGameToText() {
+        const payload = {
+            coordinateSystem: 'origin top-left; +x right; +y down',
+            mode: gameActive ? 'playing' : 'menu',
+            playerName,
+            score,
+            ammo,
+            player: { x: Math.round(player.x), y: Math.round(player.y), width: player.width, height: player.height },
+            activeTargets: targets.slice(0, 8).map(t => ({ x: Math.round(t.x), y: Math.round(t.y), width: t.width, height: t.height, type: t.type, hit: t.hit })),
+            balloons: balloons.length,
+            enemyBalloons: enemyBalloons.length,
+            topLeaderboard: leaderboard.slice(0, 5).map(entry => ({ name: entry.name, score: entry.score }))
+        };
+        return JSON.stringify(payload);
+    }
+
+    window.render_game_to_text = renderGameToText;
     init();
 </script>
 </body>
